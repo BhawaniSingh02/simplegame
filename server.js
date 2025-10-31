@@ -59,6 +59,18 @@ io.on("connection", (socket) => {
     }
   });
 
+  // 🔹 When game is over (winner declared)
+socket.on("gameOver", (data) => {
+  const opponent = players.find((id) => id !== socket.id);
+
+  if (data.winner === "me") {
+    io.to(socket.id).emit("gameOver", { winner: "you" });
+    io.to(opponent).emit("gameOver", { winner: "opponent" });
+  } else if (data.winner === "draw") {
+    io.emit("gameOver", { winner: "draw" });
+  }
+});
+
   // 🔹 Handle player disconnect
   socket.on("disconnect", () => {
     console.log("🔴 Player disconnected:", socket.id);

@@ -7,7 +7,7 @@ const restartBtn = document.getElementById("restartBtn");
 let myTurn = false;
 let gameOver = false;
 
-// All winning combinations (indexes)
+// All winning combinations
 const winCombos = [
   [0, 1, 2],
   [3, 4, 5],
@@ -19,6 +19,9 @@ const winCombos = [
   [2, 4, 6],
 ];
 
+// ========== SOCKET EVENTS ==========
+
+// When it's your turn
 socket.on("yourTurn", () => {
   if (!gameOver) {
     myTurn = true;
@@ -26,6 +29,7 @@ socket.on("yourTurn", () => {
   }
 });
 
+// When waiting
 socket.on("waitTurn", () => {
   if (!gameOver) {
     myTurn = false;
@@ -33,40 +37,52 @@ socket.on("waitTurn", () => {
   }
 });
 
+// Room full
 socket.on("roomFull", () => {
   alert("Room is full! Please wait for the next match.");
 });
 
-// When opponent makes move
+// Opponent's move
 socket.on("moveMade", (index) => {
-  if (gameOver) return;
-
-  cells[index].textContent = "O";
-  cells[index].classList.add("taken", "opponent");
-  myTurn = true;
-
-  checkWinner();
-  if (!gameOver) statusText.textContent = "Your turn!";
+  if (index >= 0 && !gameOver) {
+    cells[index].textContent = "O";
+    cells[index].classList.add("taken", "opponent");
+    checkWinner(false); // check opponent's win
+    if (!gameOver) {
+      myTurn = true;
+      statusText.textContent = "Your turn!";
+    }
+  }
 });
 
-// Reset from server
+// Game reset
 socket.on("gameReset", () => {
-  cells.forEach((cell) => {
-    cell.textContent = "";
-    cell.classList.remove("taken", "opponent", "winner");
-  });
-  gameOver = false;
+  resetBoard();
   statusText.textContent = "Game reset! Waiting for turn...";
 });
 
-// Player disconnected
+// Opponent left
 socket.on("playerLeft", () => {
   alert("Opponent left the game!");
   statusText.textContent = "Waiting for another player...";
   resetBoard();
 });
 
-// Handle player click
+// 🟢 Receive game result from server
+socket.on("gameOver", (data) => {
+  gameOver = true;
+  if (data.winner === "you") {
+    statusText.textContent = "🎉 You Win!";
+  } else if (data.winner === "opponent") {
+    statusText.textContent = "😢 You Lose!";
+  } else {
+    statusText.textContent = "🤝 It's a Draw!";
+  }
+});
+
+// ========== GAMEPLAY ==========
+
+// Click on cell
 cells.forEach((cell, index) => {
   cell.addEventListener("click", () => {
     if (!myTurn || cell.classList.contains("taken") || gameOver) return;
@@ -75,47 +91,46 @@ cells.forEach((cell, index) => {
     cell.classList.add("taken");
     myTurn = false;
 
-    checkWinner();
-    if (!gameOver) {
+    const result = checkWinner(true);
+    if (!result) {
       socket.emit("makeMove", index);
       statusText.textContent = "Opponent's turn...";
     }
   });
 });
 
-// Restart button
+// Restart
 restartBtn.addEventListener("click", () => {
   socket.emit("resetGame");
   resetBoard();
 });
 
-// ---- Helper Functions ----
+// ========== FUNCTIONS ==========
 
-function checkWinner() {
+function checkWinner(isMyMove) {
   const board = Array.from(cells).map((c) => c.textContent);
+
   for (let combo of winCombos) {
     const [a, b, c] = combo;
     if (board[a] && board[a] === board[b] && board[a] === board[c]) {
       gameOver = true;
-
-      // Highlight winner cells
       combo.forEach((i) => cells[i].classList.add("winner"));
 
-      if (board[a] === "X") {
-        statusText.textContent = "🎉 You Win!";
-        socket.emit("makeMove", -1); // Stop opponent's next move
-      } else {
-        statusText.textContent = "😢 You Lose!";
+      if (isMyMove && board[a] === "X") {
+        // Notify server: I won
+        socket.emit("gameOver", { winner: "me" });
       }
-      return;
+      return true;
     }
   }
 
-  // Check draw
+  // Draw
   if (!board.includes("") && !gameOver) {
     gameOver = true;
-    statusText.textContent = "🤝 It's a Draw!";
+    socket.emit("gameOver", { winner: "draw" });
+    return true;
   }
+  return false;
 }
 
 function resetBoard() {
