@@ -1,77 +1,82 @@
-const socket = io();
+const cells = document.querySelectorAll(".cell");
+const statusText = document.getElementById("status");
+const restartBtn = document.getElementById("restartBtn");
 
-const cells = document.querySelectorAll('.cell');
-const statusText = document.getElementById('status');
-const resetBtn = document.getElementById('resetBtn');
+let currentPlayer = "X";
+let gameOver = false;
+let board = ["", "", "", "", "", "", "", "", ""];
 
-let myTurn = true; // player 1 starts
-let currentPlayer = 'X';
-let boardState = ["", "", "", "", "", "", "", "", ""];
-let gameActive = true;
-
-const winningCombos = [
-  [0,1,2], [3,4,5], [6,7,8],
-  [0,3,6], [1,4,7], [2,5,8],
-  [0,4,8], [2,4,6]
+const winConditions = [
+  [0, 1, 2],
+  [3, 4, 5],
+  [6, 7, 8],
+  [0, 3, 6],
+  [1, 4, 7],
+  [2, 5, 8],
+  [0, 4, 8],
+  [2, 4, 6]
 ];
 
-cells.forEach(cell => {
-  cell.addEventListener('click', () => {
-    const index = cell.dataset.index;
+initializeGame();
 
-    if (!myTurn || boardState[index] || !gameActive) return;
-
-    makeMove(index, currentPlayer);
-    socket.emit('makeMove', { index, player: currentPlayer });
+function initializeGame() {
+  cells.forEach((cell, index) => {
+    cell.addEventListener("click", () => handleCellClick(index));
   });
-});
+  restartBtn.addEventListener("click", restartGame);
+  updateStatus(`Player ${currentPlayer}'s Turn`);
+}
 
-function makeMove(index, player) {
-  boardState[index] = player;
-  cells[index].textContent = player;
-  checkWinner();
+function handleCellClick(index) {
+  if (board[index] !== "" || gameOver) return;
 
-  currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
-  myTurn = !myTurn;
-  statusText.textContent = myTurn ? "Your Turn" : "Friend's Turn";
+  board[index] = currentPlayer;
+  cells[index].textContent = currentPlayer;
+
+  if (checkWinner()) {
+    updateStatus(`🎉 Player ${currentPlayer} Wins!`);
+    gameOver = true;
+    return;
+  }
+
+  if (board.every(cell => cell !== "")) {
+    updateStatus("🤝 It's a Draw!");
+    gameOver = true;
+    return;
+  }
+
+  currentPlayer = currentPlayer === "X" ? "O" : "X";
+  updateStatus(`Player ${currentPlayer}'s Turn`);
 }
 
 function checkWinner() {
-  for (let combo of winningCombos) {
-    const [a, b, c] = combo;
-    if (boardState[a] && boardState[a] === boardState[b] && boardState[a] === boardState[c]) {
-      gameActive = false;
-      statusText.textContent = `🎉 Player ${boardState[a]} wins!`;
-      [a, b, c].forEach(i => cells[i].style.background = "#90e0ef");
-      return;
+  for (let condition of winConditions) {
+    const [a, b, c] = condition;
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      highlightWinningCells(condition);
+      return true;
     }
   }
-
-  if (!boardState.includes("")) {
-    statusText.textContent = "It's a draw 😅";
-    gameActive = false;
-  }
+  return false;
 }
 
-resetBtn.addEventListener('click', () => {
-  socket.emit('resetGame');
-  resetGame();
-});
-
-socket.on('moveMade', (data) => {
-  makeMove(data.index, data.player);
-});
-
-socket.on('gameReset', resetGame);
-
-function resetGame() {
-  boardState = ["", "", "", "", "", "", "", "", ""];
-  gameActive = true;
-  currentPlayer = 'X';
-  myTurn = true;
-  statusText.textContent = "Your Turn";
-  cells.forEach(c => {
-    c.textContent = "";
-    c.style.background = "white";
+function highlightWinningCells(condition) {
+  condition.forEach(index => {
+    cells[index].style.backgroundColor = "#00C49A";
   });
+}
+
+function restartGame() {
+  board = ["", "", "", "", "", "", "", "", ""];
+  currentPlayer = "X";
+  gameOver = false;
+  cells.forEach(cell => {
+    cell.textContent = "";
+    cell.style.backgroundColor = "";
+  });
+  updateStatus(`Player ${currentPlayer}'s Turn`);
+}
+
+function updateStatus(message) {
+  statusText.textContent = message;
 }
