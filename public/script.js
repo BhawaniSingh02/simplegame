@@ -1,82 +1,66 @@
+const socket = io();
+
 const cells = document.querySelectorAll(".cell");
 const statusText = document.getElementById("status");
 const restartBtn = document.getElementById("restartBtn");
 
-let currentPlayer = "X";
+let myTurn = false;
 let gameOver = false;
-let board = ["", "", "", "", "", "", "", "", ""];
 
-const winConditions = [
-  [0, 1, 2],
-  [3, 4, 5],
-  [6, 7, 8],
-  [0, 3, 6],
-  [1, 4, 7],
-  [2, 5, 8],
-  [0, 4, 8],
-  [2, 4, 6]
-];
+// Handle turn messages
+socket.on("yourTurn", () => {
+  myTurn = true;
+  statusText.textContent = "Your turn!";
+});
 
-initializeGame();
+socket.on("waitTurn", () => {
+  myTurn = false;
+  statusText.textContent = "Opponent's turn...";
+});
 
-function initializeGame() {
-  cells.forEach((cell, index) => {
-    cell.addEventListener("click", () => handleCellClick(index));
-  });
-  restartBtn.addEventListener("click", restartGame);
-  updateStatus(`Player ${currentPlayer}'s Turn`);
-}
+// Handle room full
+socket.on("roomFull", () => {
+  alert("Room is full! Please wait for the next match.");
+});
 
-function handleCellClick(index) {
-  if (board[index] !== "" || gameOver) return;
+// Handle opponent move
+socket.on("moveMade", (index) => {
+  cells[index].classList.add("taken", "opponent");
+  cells[index].textContent = "O";
+  myTurn = true;
+  statusText.textContent = "Your turn!";
+});
 
-  board[index] = currentPlayer;
-  cells[index].textContent = currentPlayer;
-
-  if (checkWinner()) {
-    updateStatus(`🎉 Player ${currentPlayer} Wins!`);
-    gameOver = true;
-    return;
-  }
-
-  if (board.every(cell => cell !== "")) {
-    updateStatus("🤝 It's a Draw!");
-    gameOver = true;
-    return;
-  }
-
-  currentPlayer = currentPlayer === "X" ? "O" : "X";
-  updateStatus(`Player ${currentPlayer}'s Turn`);
-}
-
-function checkWinner() {
-  for (let condition of winConditions) {
-    const [a, b, c] = condition;
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-      highlightWinningCells(condition);
-      return true;
-    }
-  }
-  return false;
-}
-
-function highlightWinningCells(condition) {
-  condition.forEach(index => {
-    cells[index].style.backgroundColor = "#00C49A";
-  });
-}
-
-function restartGame() {
-  board = ["", "", "", "", "", "", "", "", ""];
-  currentPlayer = "X";
-  gameOver = false;
+// Handle reset
+socket.on("gameReset", () => {
   cells.forEach(cell => {
     cell.textContent = "";
-    cell.style.backgroundColor = "";
+    cell.classList.remove("taken", "opponent");
   });
-  updateStatus(`Player ${currentPlayer}'s Turn`);
-}
+  statusText.textContent = "Game reset! Waiting for turn...";
+  gameOver = false;
+});
 
-function updateStatus(message) {
-  statusText.textContent = message;
-}
+// Player left
+socket.on("playerLeft", () => {
+  alert("Opponent left the game!");
+  statusText.textContent = "Waiting for another player...";
+});
+
+// Make move
+cells.forEach((cell, index) => {
+  cell.addEventListener("click", () => {
+    if (!myTurn || cell.classList.contains("taken") || gameOver) return;
+
+    cell.textContent = "X";
+    cell.classList.add("taken");
+    myTurn = false;
+    socket.emit("makeMove", index);
+    statusText.textContent = "Opponent's turn...";
+  });
+});
+
+// Reset button
+restartBtn.addEventListener("click", () => {
+  socket.emit("resetGame");
+});
